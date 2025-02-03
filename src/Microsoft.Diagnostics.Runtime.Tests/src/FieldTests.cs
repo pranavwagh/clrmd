@@ -1,9 +1,9 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System;
 using System.Linq;
+using System.Reflection;
 using Xunit;
 
 namespace Microsoft.Diagnostics.Runtime.Tests
@@ -20,16 +20,16 @@ namespace Microsoft.Diagnostics.Runtime.Tests
             ClrType program = module.GetTypeByName("Program");
 
             ClrField publicField = program.GetFieldByName("publicField");
-            Assert.True(publicField.IsPublic);
+            Assert.True((publicField.Attributes & FieldAttributes.FieldAccessMask) == FieldAttributes.Public);
 
             ClrField privateField = program.GetFieldByName("privateField");
-            Assert.True(privateField.IsPrivate);
+            Assert.True((privateField.Attributes & FieldAttributes.FieldAccessMask) == FieldAttributes.Private);
 
             ClrField internalField = program.GetFieldByName("internalField");
-            Assert.True(internalField.IsInternal);
+            Assert.True((internalField.Attributes & FieldAttributes.FieldAccessMask) == FieldAttributes.Assembly);
 
             ClrField protectedField = program.GetFieldByName("protectedField");
-            Assert.True(protectedField.IsProtected);
+            Assert.True((protectedField.Attributes & FieldAttributes.FieldAccessMask) == FieldAttributes.Family);
         }
 
         [Fact]
@@ -42,16 +42,16 @@ namespace Microsoft.Diagnostics.Runtime.Tests
             ClrType program = module.GetTypeByName("Program");
 
             ClrStaticField publicField = program.GetStaticFieldByName("s_publicField");
-            Assert.True(publicField.IsPublic);
+            Assert.True((publicField.Attributes & FieldAttributes.FieldAccessMask) == FieldAttributes.Public);
 
             ClrStaticField privateField = program.GetStaticFieldByName("s_privateField");
-            Assert.True(privateField.IsPrivate);
+            Assert.True((privateField.Attributes & FieldAttributes.FieldAccessMask) == FieldAttributes.Private);
 
             ClrStaticField internalField = program.GetStaticFieldByName("s_internalField");
-            Assert.True(internalField.IsInternal);
+            Assert.True((internalField.Attributes & FieldAttributes.FieldAccessMask) == FieldAttributes.Assembly);
 
             ClrStaticField protectedField = program.GetStaticFieldByName("s_protectedField");
-            Assert.True(protectedField.IsProtected);
+            Assert.True((protectedField.Attributes & FieldAttributes.FieldAccessMask) == FieldAttributes.Family);
         }
 
         [Fact]

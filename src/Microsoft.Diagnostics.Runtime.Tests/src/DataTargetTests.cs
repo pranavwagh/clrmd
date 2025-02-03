@@ -1,12 +1,8 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
-using System;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using Microsoft.Diagnostics.Runtime.DacInterface;
 using Xunit;
 
 namespace Microsoft.Diagnostics.Runtime.Tests
@@ -16,21 +12,21 @@ namespace Microsoft.Diagnostics.Runtime.Tests
         [Fact]
         public void EnsureFinalReleaseOfInterfaces()
         {
-            using DataTarget dt = TestTargets.Types.LoadFullDump();
-
             RefCountedFreeLibrary library;
-            SOSDac sosDac;
 
-            using (ClrRuntime runtime = dt.ClrVersions.Single().CreateRuntime())
+            using (DataTarget dt = TestTargets.Types.LoadFullDump())
             {
-                library = runtime.DacLibrary.OwningLibrary;
-                sosDac = runtime.DacLibrary.SOSDacInterface;
+                using ClrRuntime runtime = dt.ClrVersions.Single().CreateRuntime();
+                ClrHeap heap = runtime.Heap;
+                _ = heap.EnumerateObjects().Count(); // ensure we warm up and use a bunch of SOSDac interfaces
+                DacLibrary dac = runtime.GetService<DacLibrary>();
+
+                library = dac.OwningLibrary;
 
                 // Keep library alive
                 library.AddRef();
             }
 
-            sosDac.Dispose();
             Assert.Equal(0, library.Release());
         }
 

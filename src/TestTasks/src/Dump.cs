@@ -1,11 +1,10 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System;
 using Microsoft.Build.Framework;
 using Microsoft.Build.Utilities;
-using Microsoft.Diagnostics.Runtime.Interop;
+using Microsoft.Diagnostics.Runtime.Utilities.DbgEng;
 
 namespace Microsoft.Diagnostics.Runtime.Tests.Tasks
 {
@@ -36,9 +35,8 @@ namespace Microsoft.Diagnostics.Runtime.Tests.Tasks
             }
 
             using Debugger debugger = info.LaunchProcess(ExePath, null);
-            debugger.SecondChanceExceptionEvent += (debugger, exception) =>
-            {
-                if (exception.ExceptionCode == (uint)ExceptionTypes.Clr)
+            debugger.OnException += (debugger, exception, firstChance) => {
+                if (!firstChance && exception.ExceptionCode == (uint)ExceptionTypes.Clr)
                 {
                     _ = debugger.WriteDumpFile(FullDumpPath, DEBUG_DUMP.DEFAULT);
 
@@ -52,7 +50,7 @@ namespace Microsoft.Diagnostics.Runtime.Tests.Tasks
             DEBUG_STATUS status;
             do
             {
-                status = debugger.ProcessEvents(0xffffffff);
+                status = debugger.ProcessEvents(TimeSpan.MaxValue);
             } while (status != DEBUG_STATUS.NO_DEBUGGEE);
 
             return true;

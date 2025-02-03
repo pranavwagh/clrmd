@@ -1,10 +1,11 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Microsoft.Diagnostics.Runtime.Implementation;
 using Microsoft.Diagnostics.Runtime.Utilities;
 using Xunit;
 
@@ -19,7 +20,7 @@ namespace Microsoft.Diagnostics.Runtime.Tests
 
             // Make sure we never return different values for the version
             using DataTarget dt = TestTargets.Types.LoadFullDump();
-            foreach (ModuleInfo module in dt.EnumerateModules())
+            foreach (PEModuleInfo module in dt.EnumerateModules())
             {
                 if (!module.IsManaged)
                     continue;
@@ -30,8 +31,8 @@ namespace Microsoft.Diagnostics.Runtime.Tests
                 FileVersionInfo fileVersionInfo = img.GetFileVersionInfo();
                 if (fileVersionInfo != null)
                 {
-                    VersionInfo moduleVersion = module.Version;
-                    Assert.Equal(moduleVersion, fileVersionInfo.VersionInfo);
+                    Version moduleVersion = module.Version;
+                    Assert.Equal(moduleVersion, fileVersionInfo.Version);
                     found = true;
                 }
             }
@@ -48,8 +49,8 @@ namespace Microsoft.Diagnostics.Runtime.Tests
             using DataTarget dt = TestTargets.AppDomains.LoadFullDump();
             using ClrRuntime runtime = dt.ClrVersions.Single().CreateRuntime();
 
-            HashSet<ulong> seen = new HashSet<ulong> { 0 };
-            HashSet<ClrModule> seenModules = new HashSet<ClrModule> { null };
+            HashSet<ulong> seen = new() { 0 };
+            HashSet<ClrModule> seenModules = new() { null };
             foreach (ClrModule module in runtime.EnumerateModules())
             {
                 Assert.True(seenModules.Add(module));
@@ -147,11 +148,6 @@ namespace Microsoft.Diagnostics.Runtime.Tests
                     }
 
                     Assert.NotNull(type);
-
-                    ClrType typeFromToken = module.ResolveToken(token);
-                    Assert.NotNull(typeFromToken);
-
-                    Assert.Same(type, typeFromToken);
                 }
             }
 

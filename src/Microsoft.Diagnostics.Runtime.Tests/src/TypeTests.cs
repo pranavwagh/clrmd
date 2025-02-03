@@ -1,10 +1,8 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -30,33 +28,33 @@ namespace Microsoft.Diagnostics.Runtime.Tests
 
             ClrModule module = runtime.GetModule(NestedTypesModuleName);
             ClrType program = module.GetTypeByName("Program");
-            Assert.True(program.IsPublic);
-            Assert.False(program.IsAbstract);
-            Assert.False(program.IsSealed);
+            Assert.True((program.TypeAttributes & (TypeAttributes.Public | TypeAttributes.NestedPublic)) != 0);
+            Assert.False((program.TypeAttributes & TypeAttributes.Abstract) == TypeAttributes.Abstract);
+            Assert.False((program.TypeAttributes & TypeAttributes.Sealed) == TypeAttributes.Sealed);
 
             ClrType publicClass = module.GetTypeByName("Program+PublicClass");
-            Assert.True(publicClass.IsPublic);
+            Assert.True((publicClass.TypeAttributes & (TypeAttributes.Public | TypeAttributes.NestedPublic)) != 0);
 
             ClrType privateClass = module.GetTypeByName("Program+PrivateClass");
-            Assert.True(privateClass.IsPrivate);
+            Assert.True((privateClass.TypeAttributes & TypeAttributes.VisibilityMask) == TypeAttributes.NestedPrivate);
 
             ClrType internalClass = module.GetTypeByName("Program+InternalClass");
-            Assert.True(internalClass.IsInternal);
+            Assert.True(((internalClass.TypeAttributes & (TypeAttributes.NestedAssembly | TypeAttributes.NotPublic)) != 0));
 
             ClrType protectedClass = module.GetTypeByName("Program+ProtectedClass");
-            Assert.True(protectedClass.IsProtected);
+            Assert.True((protectedClass.TypeAttributes & TypeAttributes.NestedFamily) != 0);
 
             ClrType abstractClass = module.GetTypeByName("Program+AbstractClass");
-            Assert.True(abstractClass.IsAbstract);
-            Assert.False(abstractClass.IsSealed);
+            Assert.True((abstractClass.TypeAttributes & TypeAttributes.Abstract) == TypeAttributes.Abstract);
+            Assert.False((abstractClass.TypeAttributes & TypeAttributes.Sealed) == TypeAttributes.Sealed);
 
             ClrType sealedClass = module.GetTypeByName("Program+SealedClass");
-            Assert.True(sealedClass.IsSealed);
-            Assert.False(sealedClass.IsAbstract);
+            Assert.True((sealedClass.TypeAttributes & TypeAttributes.Sealed) == TypeAttributes.Sealed);
+            Assert.False((sealedClass.TypeAttributes & TypeAttributes.Abstract) == TypeAttributes.Abstract);
 
             ClrType staticClass = module.GetTypeByName("Program+StaticClass");
-            Assert.True(staticClass.IsAbstract);
-            Assert.True(staticClass.IsSealed);
+            Assert.True((staticClass.TypeAttributes & TypeAttributes.Abstract) == TypeAttributes.Abstract);
+            Assert.True((staticClass.TypeAttributes & TypeAttributes.Sealed) == TypeAttributes.Sealed);
         }
 
         [Fact]
@@ -81,7 +79,7 @@ namespace Microsoft.Diagnostics.Runtime.Tests
             Assert.False(type.IsObjectReference);
             Assert.True(type.IsValueType);
 
-            var fds = obj.Type.Fields;
+            System.Collections.Immutable.ImmutableArray<ClrInstanceField> fds = obj.Type.Fields;
 
             Assert.True(obj.IsBoxedValue);
             int value = obj.ReadBoxedValue<int>();
@@ -102,6 +100,8 @@ namespace Microsoft.Diagnostics.Runtime.Tests
             {
                 ClrType type = obj.Type;
                 Assert.True(!type.IsArray || type.ComponentType != null);
+
+                ClrGenericParameter[] generics = type.EnumerateGenericParameters().ToArray();
 
                 foreach (ClrInstanceField field in type.Fields)
                 {
@@ -167,23 +167,6 @@ namespace Microsoft.Diagnostics.Runtime.Tests
             Assert.Equal(FileAccess.Read, clrEnum.GetEnumValue<FileAccess>(nameof(FileAccess.Read)));
             Assert.Equal(FileAccess.Write, clrEnum.GetEnumValue<FileAccess>(nameof(FileAccess.Write)));
             Assert.Equal(FileAccess.ReadWrite, clrEnum.GetEnumValue<FileAccess>(nameof(FileAccess.ReadWrite)));
-        }
-
-        [Fact]
-        public void AirtyTest()
-        {
-            // https://github.com/microsoft/clrmd/issues/394
-            string name = ClrmdType.FixGenerics("Microsoft.Diagnostics.Runtime.Tests.TypeTests+GenericTest`2[[System.String, System.Private.CoreLib],[System.Collections.Generic.List`1[[System.Collections.Generic.IEnumerable`1[[System.Int32, System.Private.CoreLib]][,], System.Private.CoreLib]][], System.Private.CoreLib]]");
-            const string expected = "Microsoft.Diagnostics.Runtime.Tests.TypeTests+GenericTest<System.String, System.Collections.Generic.List<System.Collections.Generic.IEnumerable<System.Int32>[,]>[]>";
-
-            Assert.Equal(expected, name);
-
-            name = ClrmdType.FixGenerics("Microsoft.Diagnostics.Runtime.Tests.TypeTests+GenericTest[[System.String, System.Private.CoreLib],[System.Collections.Generic.List[[System.Collections.Generic.IEnumerable[[System.Int32, System.Private.CoreLib]][,], System.Private.CoreLib]][], System.Private.CoreLib]]");
-
-            Assert.Equal(expected, name);
-
-            Assert.Equal("MyAssembly.Test<System.String>", ClrmdType.FixGenerics("MyAssembly.Test`1[[System.String, mscorlib]]"));
-            Assert.Equal("MyAssembly.Test<System.String>", ClrmdType.FixGenerics("MyAssembly.Test[[System.String, mscorlib]]"));
         }
 
         [FrameworkFact]
@@ -258,11 +241,11 @@ namespace Microsoft.Diagnostics.Runtime.Tests
             using ClrRuntime runtime = dt.ClrVersions.Single().CreateRuntime();
             ClrHeap heap = runtime.Heap;
 
-            IEnumerable<IClrRoot> fooRoots = from root in heap.EnumerateRoots()
-                                             where root.Object.Type.Name == "Foo"
-                                             select root;
+            IEnumerable<ClrRoot> fooRoots = from root in heap.EnumerateRoots()
+                                            where root.Object.Type.Name == "Foo"
+                                            select root;
 
-            IClrRoot[] localVarRoots = fooRoots.Where(r => r.RootKind == ClrRootKind.Stack).ToArray();
+            ClrRoot[] localVarRoots = fooRoots.Where(r => r.RootKind == ClrRootKind.Stack).ToArray();
 
             ClrThread thread = runtime.GetMainThread();
             ClrStackFrame main = thread.GetFrame("Main");
@@ -273,13 +256,9 @@ namespace Microsoft.Diagnostics.Runtime.Tests
 
             // Account for different platform stack direction.
             if (low > high)
-            {
-                ulong tmp = low;
-                low = high;
-                high = tmp;
-            }
+                (high, low) = (low, high);
 
-            foreach (IClrRoot localVarRoot in localVarRoots)
+            foreach (ClrRoot localVarRoot in localVarRoots)
                 Assert.True(low <= localVarRoot.Address && localVarRoot.Address <= high);
         }
 
@@ -398,11 +377,11 @@ namespace Microsoft.Diagnostics.Runtime.Tests
                     // We are hoping that creating a type through a MT will result in a real ClrmdType and
                     // not a ClrmdPrimitiveType.  A ClrmdPrimitiveType is there to mock up a type we cannot
                     // find.
-                    Assert.IsType<ClrmdType>(type);
+                    Assert.IsType<ClrDacType>(type);
 
-                    ClrmdType ct = (ClrmdType)type;
+                    ClrDacType ct = (ClrDacType)type;
 
-                    ClrmdPrimitiveType prim = new ClrmdPrimitiveType((ITypeHelpers)type.ClrObjectHelpers, runtime.BaseClassLibrary, runtime.Heap, ct.ElementType);
+                    ClrPrimitiveType prim = new(type.Helpers, runtime.BaseClassLibrary, runtime.Heap, ct.ElementType);
                     Assert.True(ct == prim);
                     Assert.True(prim == ct);
                 }
@@ -457,7 +436,7 @@ namespace Microsoft.Diagnostics.Runtime.Tests
         public void ComponentTypeEventuallyFilledTest()
         {
             // https://github.com/microsoft/clrmd/issues/108
-            // Ensure that a previously created type with a erronous null ComponentType eventually
+            // Ensure that a previously created type with a erroneous null ComponentType eventually
             // gets its ComponentType set.
 
             using DataTarget dt = TestTargets.Types.LoadFullDump();
@@ -520,7 +499,7 @@ namespace Microsoft.Diagnostics.Runtime.Tests
             TestFieldNameAndValue(fooType, obj, "d", 8.4);
         }
 
-        public ClrInstanceField TestFieldNameAndValue(ClrType type, ulong obj, string name, string value)
+        public static ClrInstanceField TestFieldNameAndValue(ClrType type, ulong obj, string name, string value)
         {
             ClrInstanceField field = type.GetFieldByName(name);
             Assert.NotNull(field);
@@ -532,7 +511,7 @@ namespace Microsoft.Diagnostics.Runtime.Tests
             return field;
         }
 
-        public ClrInstanceField TestFieldNameAndValue<T>(ClrType type, ulong obj, string name, T value)
+        public static ClrInstanceField TestFieldNameAndValue<T>(ClrType type, ulong obj, string name, T value)
             where T : unmanaged
         {
             ClrInstanceField field = type.GetFieldByName(name);
@@ -564,7 +543,11 @@ namespace Microsoft.Diagnostics.Runtime.Tests
             using DataTarget dt = TestTargets.Types.LoadFullDump();
             using ClrRuntime runtime = dt.ClrVersions.Single().CreateRuntime();
 
-            ClrType genericType = runtime.GetModule("sharedlibrary.dll").GetTypeByName("GenericClass`5");
+            ClrModule sharedlibrary = runtime.GetModule("sharedlibrary.dll");
+            Assert.NotNull(sharedlibrary);
+
+            ClrType genericType = sharedlibrary.GetTypeByName("GenericClass<T1, T2, T3, T4, T5>");
+            Assert.NotNull(genericType);
 
             ClrGenericParameter[] genericParameters = genericType.EnumerateGenericParameters().ToArray();
             Assert.Equal(5, genericParameters.Length);
@@ -588,7 +571,7 @@ namespace Microsoft.Diagnostics.Runtime.Tests
         [WindowsFact]
         public void CollectibleTypeTest()
         {
-            CollectibleAssemblyLoadContext context = new CollectibleAssemblyLoadContext();
+            CollectibleAssemblyLoadContext context = new();
 
             RuntimeHelpers.RunClassConstructor(context.LoadFromAssemblyPath(Assembly.GetExecutingAssembly().Location)
                 .GetType(typeof(CollectibleUnmanagedStruct).FullName).TypeHandle);
@@ -596,7 +579,7 @@ namespace Microsoft.Diagnostics.Runtime.Tests
             RuntimeHelpers.RunClassConstructor(Assembly.GetExecutingAssembly()
                 .GetType(typeof(UncollectibleUnmanagedStruct).FullName).TypeHandle);
 
-            using DataTarget dataTarget = DataTarget.CreateSnapshotAndAttach(Process.GetCurrentProcess().Id);
+            using DataTarget dataTarget = DataTarget.CreateSnapshotAndAttach(Environment.ProcessId);
 
             ClrHeap heap = dataTarget.ClrVersions.Single(v => v.ModuleInfo.FileName.EndsWith("coreclr.dll", true, null)).CreateRuntime().Heap;
 
@@ -625,12 +608,8 @@ namespace Microsoft.Diagnostics.Runtime.Tests
             using DataTarget dt = TestTargets.Types.LoadFullDump();
             using ClrRuntime runtime = dt.ClrVersions.Single().CreateRuntime();
 
-            var query = from obj in runtime.Heap.EnumerateObjects()
-                        where obj.Type?.Name?.StartsWith("Types+<Async>d__") == true
-                        select obj.Type;
-
-            ClrType clrType = query.Single();
-            ClrInterface clrInterface = clrType.EnumerateInterfaces().Single();
+            ClrObject obj = Assert.Single(runtime.Heap.EnumerateObjects().Where(obj => obj.Type?.Name?.StartsWith("Types+<Async>d__") ?? false));
+            ClrInterface clrInterface = Assert.Single(obj.Type.EnumerateInterfaces());
 
             Assert.Equal("System.Runtime.CompilerServices.IAsyncStateMachine", clrInterface.Name);
         }
@@ -641,9 +620,9 @@ namespace Microsoft.Diagnostics.Runtime.Tests
             using DataTarget dt = TestTargets.Types.LoadFullDump();
             using ClrRuntime runtime = dt.ClrVersions.Single().CreateRuntime();
 
-            var query = from obj in runtime.Heap.EnumerateObjects()
-                        where obj.Type?.Name == "System.String"
-                        select obj.Type;
+            IEnumerable<ClrType> query = from obj in runtime.Heap.EnumerateObjects()
+                                         where obj.Type?.Name == "System.String"
+                                         select obj.Type;
 
             ClrType clrType = query.First();
             // EnumerateInterfaces should not throw an exception
@@ -742,7 +721,7 @@ namespace Microsoft.Diagnostics.Runtime.Tests
 
             ClrType arrayType = heap.GetObjectType(s_array);
 
-            List<ulong> objs = new List<ulong>();
+            List<ulong> objs = new();
             ClrObject obj = heap.GetObject(s_array);
             objs.AddRange(obj.EnumerateReferences().Select(o => o.Address));
 

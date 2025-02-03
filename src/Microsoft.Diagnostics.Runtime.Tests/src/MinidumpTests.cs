@@ -1,6 +1,5 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System;
 using System.Linq;
@@ -8,7 +7,7 @@ using Xunit;
 
 namespace Microsoft.Diagnostics.Runtime.Tests
 {
-    internal class StackTraceEntry
+    internal sealed class StackTraceEntry
     {
         public ClrStackFrameKind Kind { get; set; }
         public string ModuleString { get; set; }
@@ -17,6 +16,14 @@ namespace Microsoft.Diagnostics.Runtime.Tests
 
     public class MinidumpTests
     {
+
+        [Fact]
+        public void MinidumpProcessIdTest()
+        {
+            using DataTarget dt = TestTargets.NestedException.LoadMinidump();
+            Assert.True(dt.DataReader.ProcessId > 0);
+        }
+
         [Fact]
         public void MinidumpCallstackTest()
         {
@@ -56,7 +63,7 @@ namespace Microsoft.Diagnostics.Runtime.Tests
         public void MinidumpExceptionPropertiesNoSymbolsTest()
         {
             using DataTarget dt = TestTargets.NestedException.LoadMinidump();
-            dt.BinaryLocator = new NullBinaryLocator();
+            dt.FileLocator = new NullBinaryLocator(dt.FileLocator);
             using ClrRuntime runtime = dt.ClrVersions.Single().CreateRuntime();
             ExceptionTests.TestProperties(runtime);
         }

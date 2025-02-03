@@ -1,6 +1,5 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System;
 using System.Collections.Generic;
@@ -26,20 +25,20 @@ namespace Microsoft.Diagnostics.Runtime.Tests
             dataTarget.Dispose();
         }
 
-        private IEnumerable<IClrStackRoot> GetStackRoots(string methodName)
+        private IEnumerable<ClrRoot> GetStackRoots(string methodName)
         {
             return runtime.Threads.Single(thread => thread.EnumerateStackTrace().Any(frame => frame.Method?.Name == methodName))
                 .EnumerateStackRoots().Where(root => root.StackFrame.Method?.Name == methodName);
         }
 
-        private void AssertReferenceType(IEnumerable<IClrStackRoot> stackRoots)
+        private void AssertReferenceType(IEnumerable<ClrRoot> stackRoots)
         {
-            IClrStackRoot stackRoot = Assert.Single(stackRoots);
+            ClrRoot stackRoot = Assert.Single(stackRoots);
             Assert.True(stackRoot.IsInterior);
             Assert.True(stackRoot.Object.IsValid);
         }
 
-        private void AssertValueType(IEnumerable<IClrStackRoot> stackRoots)
+        private void AssertValueType(IEnumerable<ClrRoot> stackRoots)
         {
             Assert.Empty(stackRoots);
         }
